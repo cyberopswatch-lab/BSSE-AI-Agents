@@ -45,24 +45,24 @@ jobs:
 
       # ── Package Lambda functions ───────────────────────────────────────────
       - name: Package HR Agent Lambda
+        working-directory: agents/hr
         run: |
-          cd agents/hr && \
           pip install -r requirements.txt -t ./package --quiet && \
           cd package && zip -r9 ../hr_agent.zip . --quiet && cd .. && \
           zip -g hr_agent.zip handler.py --quiet && \
           rm -rf package/
 
       - name: Package Finance Agent Lambda
+        working-directory: agents/finance
         run: |
-          cd agents/finance && \
           pip install -r requirements.txt -t ./package --quiet && \
           cd package && zip -r9 ../finance_agent.zip . --quiet && cd .. && \
           zip -g finance_agent.zip handler.py --quiet && \
           rm -rf package/
 
       - name: Package Advisor Agent Lambda
+        working-directory: agents/advisor
         run: |
-          cd agents/advisor && \
           pip install -r requirements.txt -t ./package --quiet && \
           cd package && zip -r9 ../advisor_agent.zip . --quiet && cd .. && \
           zip -g advisor_agent.zip handler.py --quiet && \
