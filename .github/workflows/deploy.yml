@@ -45,30 +45,27 @@ jobs:
       # ── Package Lambda functions ───────────────────────────────────────────
       - name: Package HR Agent Lambda
         run: |
-          cd agents/hr
-          pip install -r requirements.txt -t ./package --quiet
-          cd package && zip -r9 ../hr_agent.zip . --quiet && cd ..
-          zip -g hr_agent.zip handler.py --quiet
+          cd agents/hr && \
+          pip install -r requirements.txt -t ./package --quiet && \
+          cd package && zip -r9 ../hr_agent.zip . --quiet && cd .. && \
+          zip -g hr_agent.zip handler.py --quiet && \
           rm -rf package/
-          echo "HR agent packaged: $(du -sh hr_agent.zip | cut -f1)"
 
       - name: Package Finance Agent Lambda
         run: |
-          cd agents/finance
-          pip install -r requirements.txt -t ./package --quiet
-          cd package && zip -r9 ../finance_agent.zip . --quiet && cd ..
-          zip -g finance_agent.zip handler.py --quiet
+          cd agents/finance && \
+          pip install -r requirements.txt -t ./package --quiet && \
+          cd package && zip -r9 ../finance_agent.zip . --quiet && cd .. && \
+          zip -g finance_agent.zip handler.py --quiet && \
           rm -rf package/
-          echo "Finance agent packaged: $(du -sh finance_agent.zip | cut -f1)"
 
       - name: Package Advisor Agent Lambda
         run: |
-          cd agents/advisor
-          pip install -r requirements.txt -t ./package --quiet
-          cd package && zip -r9 ../advisor_agent.zip . --quiet && cd ..
-          zip -g advisor_agent.zip handler.py --quiet
+          cd agents/advisor && \
+          pip install -r requirements.txt -t ./package --quiet && \
+          cd package && zip -r9 ../advisor_agent.zip . --quiet && cd .. && \
+          zip -g advisor_agent.zip handler.py --quiet && \
           rm -rf package/
-          echo "Advisor agent packaged: $(du -sh advisor_agent.zip | cut -f1)"
 
       # ── Terraform Deploy ───────────────────────────────────────────────────
       - name: Terraform Init
