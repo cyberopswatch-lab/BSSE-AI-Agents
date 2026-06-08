@@ -1,0 +1,119 @@
+name: Deploy BSSE to AWS
+
+on:
+  push:
+    branches:
+      - main         # Auto-deploy on every push to main
+  workflow_dispatch: # Allow manual trigger from GitHub Actions UI
+
+env:
+  AWS_REGION: us-east-1
+  TF_VERSION: 1.7.0
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    environment: production   # Requires GitHub Environment approval if configured
+
+    steps:
+      # ── Checkout ───────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Python setup ───────────────────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # ── AWS Credentials ────────────────────────────────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      # ── Terraform setup ────────────────────────────────────────────────────
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # ── Package Lambda functions ───────────────────────────────────────────
+      - name: Package HR Agent Lambda
+        run: |
+          cd agents/hr
+          pip install -r requirements.txt -t ./package --quiet
+          cd package && zip -r9 ../hr_agent.zip . --quiet && cd ..
+          zip -g hr_agent.zip handler.py --quiet
+          rm -rf package/
+          echo "HR agent packaged: $(du -sh hr_agent.zip | cut -f1)"
+
+      - name: Package Finance Agent Lambda
+        run: |
+          cd agents/finance
+          pip install -r requirements.txt -t ./package --quiet
+          cd package && zip -r9 ../finance_agent.zip . --quiet && cd ..
+          zip -g finance_agent.zip handler.py --quiet
+          rm -rf package/
+          echo "Finance agent packaged: $(du -sh finance_agent.zip | cut -f1)"
+
+      - name: Package Advisor Agent Lambda
+        run: |
+          cd agents/advisor
+          pip install -r requirements.txt -t ./package --quiet
+          cd package && zip -r9 ../advisor_agent.zip . --quiet && cd ..
+          zip -g advisor_agent.zip handler.py --quiet
+          rm -rf package/
+          echo "Advisor agent packaged: $(du -sh advisor_agent.zip | cut -f1)"
+
+      # ── Terraform Deploy ───────────────────────────────────────────────────
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init -upgrade -input=false
+
+      - name: Terraform Plan
+        working-directory: terraform
+        run: |
+          terraform plan \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -input=false \
+            -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -input=false -auto-approve tfplan
+
+      # ── Update SSM with API Key ────────────────────────────────────────────
+      - name: Store Anthropic API key in SSM
+        run: |
+          aws ssm put-parameter \
+            --name "/bsse/anthropic_api_key" \
+            --value "${{ secrets.ANTHROPIC_API_KEY }}" \
+            --type SecureString \
+            --overwrite \
+            --region ${{ env.AWS_REGION }}
+
+      # ── Seed Knowledge Base ────────────────────────────────────────────────
+      - name: Seed knowledge base to S3
+        run: |
+          pip install boto3 python-dotenv --quiet
+          KNOWLEDGE_BUCKET=$(cd terraform && terraform output -raw knowledge_base_bucket)
+          python scripts/seed_knowledge.py --bucket "$KNOWLEDGE_BUCKET" --docs-dir ./docs
+
+      # ── Summary ───────────────────────────────────────────────────────────
+      - name: Deployment Summary
+        working-directory: terraform
+        run: |
+          echo "## BSSE Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Agent | ARN |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| AVA (HR) | $(terraform output -raw hr_agent_lambda_arn) |" >> $GITHUB_STEP_SUMMARY
+          echo "| FELIX (Finance) | $(terraform output -raw finance_agent_lambda_arn) |" >> $GITHUB_STEP_SUMMARY
+          echo "| ATLAS (Advisor) | $(terraform output -raw advisor_agent_lambda_arn) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All agents deployed successfully" >> $GITHUB_STEP_SUMMARY
